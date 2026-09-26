@@ -5,6 +5,8 @@ import ca.ubc.cs317.dict.model.Definition;
 import ca.ubc.cs317.dict.model.MatchingStrategy;
 
 import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.util.*;
@@ -15,6 +17,9 @@ import java.util.*;
 public class DictionaryConnection {
 
     private static final int DEFAULT_PORT = 2628;
+    private Socket socket;
+    private BufferedReader reader;
+    private PrintWriter writer;
 
     /** Establishes a new connection with a DICT server using an explicit host and port number, and handles initial
      * welcome messages.
@@ -25,8 +30,18 @@ public class DictionaryConnection {
      * don't match their expected value.
      */
     public DictionaryConnection(String host, int port) throws DictConnectionException {
-        // TODO Replace this with code that creates the requested connection
-        throw new DictConnectionException("Not implemented");
+        try {
+            socket = new Socket(host, port);
+            reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            writer = new PrintWriter(socket.getOutputStream(), true);
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode != 220) {
+                throw new DictConnectionException("Status Code is not 220!");
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException("Can't build a new connection with the server.", e);
+        }
     }
 
     /** Establishes a new connection with a DICT server using an explicit host, with the default DICT port number, and
@@ -45,8 +60,19 @@ public class DictionaryConnection {
      *
      */
     public synchronized void close() {
-
-        // TODO Add your code here
+        try {
+            writer.println("QUIT");
+            Status status = Status.readStatus(reader);
+            System.out.println(status);
+        } catch (Exception e) { // Ignore
+        } finally {
+            try {
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (IOException e) { // Ignore
+            }
+        }
     }
 
     /** Requests and retrieves all definitions for a specific word.
