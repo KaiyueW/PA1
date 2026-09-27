@@ -87,9 +87,43 @@ public class DictionaryConnection {
      */
     public synchronized Collection<Definition> getDefinitions(String word, Database database) throws DictConnectionException {
         Collection<Definition> set = new ArrayList<>();
+        try {
+            writer.println("DEFINE " + database.getName() + " \"" + word + "\"");
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode == 550) {
+                return set; // Invalid database
+            } else if (statusCode == 552) {
+                return set;  // No match
+            } else if (statusCode != 150) {
+                throw new DictConnectionException("Unexpected status code.");
+            }
 
-        // TODO Add your code here
+            // parse the defs
+            while (true) {
+                Status s = Status.readStatus(reader);
+                int sCode = s.getStatusCode();
+                if (sCode == 250) {
+                    break;
+                }
+                if (sCode != 151) {
+                    throw new DictConnectionException("Invalid Status Code.");
+                }
+                // code is 151
+                String details = s.getDetails();
+                String[] atoms = DictStringParser.splitAtoms(details); // parameter 1 is the word retrieved, parameter 2 is the database name
+                Definition def = new Definition(atoms[0], atoms[1]);
 
+                String l = reader.readLine();
+                while (!l.equals(".")) {
+                    def.appendDefinition(l);
+                    l = reader.readLine();
+                }
+                set.add(def);
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException("Unexpected error", e);
+        }
         return set;
     }
 
@@ -105,9 +139,32 @@ public class DictionaryConnection {
      */
     public synchronized Set<String> getMatchList(String word, MatchingStrategy strategy, Database database) throws DictConnectionException {
         Set<String> set = new LinkedHashSet<>();
+        try {
+            writer.println("MATCH " + database.getName() + " " + strategy.getName() + " \"" + word + "\"");
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode == 550 || statusCode == 551 || statusCode == 552) {
+                return set;
+            } else if (statusCode != 152) {
+                throw new DictConnectionException("Unexpected status code.");
+            }
 
-        // TODO Add your code here
+            // code is 152
+            String line = reader.readLine();
+            while (!line.equals(".")) {
+                String[] atoms = DictStringParser.splitAtoms(line);
+                set.add(atoms[1]);
+                line = reader.readLine();
+            }
 
+            Status finalstatus = Status.readStatus(reader);
+            int finalstatusCode = finalstatus.getStatusCode();
+            if (finalstatusCode != 250) {
+                throw new DictConnectionException("Unexpected final status code.");
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException(e);
+        }
         return set;
     }
 
@@ -118,9 +175,34 @@ public class DictionaryConnection {
      */
     public synchronized Map<String, Database> getDatabaseList() throws DictConnectionException {
         Map<String, Database> databaseMap = new HashMap<>();
+        try {
+            writer.println("SHOW DB");
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode == 554) { // No databases present
+                return databaseMap;
+            } else if (statusCode != 110) {
+                throw new DictConnectionException("Unexpected status code received.");
+            }
 
-        // TODO Add your code here
+            String l = reader.readLine();
+            while (!l.equals(".")) {
+                String[] atoms = DictStringParser.splitAtoms(l);
+                String name = atoms[0];
+                String des = atoms[1];
+                Database db = new Database(name, des);
+                databaseMap.put(name, db);
+                l = reader.readLine();
+            }
 
+            Status finalStatus = Status.readStatus(reader);
+            int finalStatusCode = finalStatus.getStatusCode();
+            if (finalStatusCode != 250) {
+                throw new DictConnectionException("unexpected status code");
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException(e);
+        }
         return databaseMap;
     }
 
@@ -131,9 +213,35 @@ public class DictionaryConnection {
      */
     public synchronized Set<MatchingStrategy> getStrategyList() throws DictConnectionException {
         Set<MatchingStrategy> set = new LinkedHashSet<>();
+        try {
+            writer.println("SHOW STRAT");
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode == 555) {
+                return set;
+            } else if (statusCode != 111) {
+                throw new DictConnectionException("Unexpected status code.");
+            }
 
-        // TODO Add your code here
+            // code is 111
+            String l = reader.readLine();
+            while (!l.equals(".")) {
+                String[] atoms = DictStringParser.splitAtoms(l);
+                String start = atoms[0];
+                String des = atoms[1];
+                MatchingStrategy ele = new MatchingStrategy(start, des);
+                set.add(ele);
+                l = reader.readLine();
+            }
 
+            Status finalStatus = Status.readStatus(reader);
+            int finalStatusCode = finalStatus.getStatusCode();
+            if (finalStatusCode != 250) {
+                throw new DictConnectionException("unexpected status code other than 250");
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException(e);
+        }
         return set;
     }
 
@@ -143,10 +251,39 @@ public class DictionaryConnection {
      * @throws DictConnectionException If the connection was interrupted or the messages don't match their expected value.
      */
     public synchronized String getDatabaseInfo(Database d) throws DictConnectionException {
-	StringBuilder sb = new StringBuilder();
+        StringBuilder sb = new StringBuilder();
+        try {
+            writer.println("SHOW INFO " + d.getName());
+            Status status = Status.readStatus(reader);
+            int statusCode = status.getStatusCode();
+            if (statusCode == 550) {
+                return sb.toString();
+            } else if (statusCode != 112) {
+                throw new DictConnectionException("Unexpected status code.");
+            }
 
-        // TODO Add your code here
+            // code is 112
+            String line = reader.readLine();
+            boolean b = true;
+            while (!line.equals(".")) {
+                if (b) {
+                    sb.append(line);
+                } else {
+                    sb.append("\n");
+                    sb.append(line);
+                }
+                line = reader.readLine();
+                b = false;
+            }
 
+            Status finalStatus = Status.readStatus(reader);
+            int finalStatusCode = finalStatus.getStatusCode();
+            if (finalStatusCode != 250) {
+                throw new DictConnectionException("unexpected status code other than 250");
+            }
+        } catch (IOException e) {
+            throw new DictConnectionException(e);
+        }
         return sb.toString();
-    }
+    }      
 }
